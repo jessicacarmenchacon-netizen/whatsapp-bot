@@ -5,6 +5,9 @@ const {
 } = require("@whiskeysockets/baileys");
 
 const qrcode = require("qrcode-terminal");
+const fs = require("fs");
+
+const NUMERO = "51989235888";
 
 async function startBot() {
 
@@ -22,30 +25,35 @@ async function startBot() {
 
     sock.ev.on("creds.update", saveCreds);
 
-    sock.ev.on("connection.update", ({ connection, qr, lastDisconnect }) => {
+    sock.ev.on("connection.update", async ({ connection, qr, lastDisconnect, isNewLogin }) => {
 
         if (qr) {
-            qrcode.generate(qr, { small: true });
-            console.log("📱 Escanea este QR con WhatsApp");
+            console.log("📱 Generando pairing code...");
+            try {
+                const code = await sock.requestPairingCode(NUMERO);
+                console.log(`\n🔑 TU CÓDIGO DE VINCULACIÓN: ${code}\n`);
+                console.log("Ve a WhatsApp → Dispositivos vinculados → Vincular con número de teléfono");
+                console.log("Ingresa el código de 8 dígitos que aparece arriba\n");
+            } catch (err) {
+                console.error("❌ Error generando pairing code:", err.message);
+            }
         }
 
         if (connection === "open") {
-            console.log("✅ BOT CONECTADO");
+            console.log("✅ BOT CONECTADO Y ACTIVO EN LA NUBE");
         }
 
         if (connection === "close") {
 
-            const codigo =
-                lastDisconnect?.error?.output?.statusCode;
-
-            const razon =
-                lastDisconnect?.error?.message || "desconocida";
+            const codigo = lastDisconnect?.error?.output?.statusCode;
+            const razon = lastDisconnect?.error?.message || "desconocida";
 
             console.log(`⚠️ Conexión cerrada. Razón: ${razon} (código: ${codigo})`);
 
             if (codigo === DisconnectReason.loggedOut || codigo === 401) {
-                console.log("❌ Sesión expirada. Borra la carpeta auth y vuelve a escanear.");
-                process.exit(0);
+                console.log("❌ Sesión expirada. Borrando auth y reconectando...");
+                fs.rmSync("auth", { recursive: true, force: true });
+                setTimeout(() => startBot(), 3000);
             } else {
                 const delay = codigo === 515 ? 3000 : 5000;
                 console.log(`🔄 Reconectando en ${delay / 1000}s...`);
